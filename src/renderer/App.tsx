@@ -1,64 +1,67 @@
-import HID from 'node-hid';
+import { Device } from '../main/devices';
 
+import { useState, useEffect } from 'react';
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
 // import icon from '../../assets/icon.svg';
 import './App.css';
 
-const devices = HID.devices();
-
-devices.sort((a, b) => b.vendorId - a.vendorId || b.productId - a.productId);
-
-/* eslint-disable */
-function decimalToHex(decimal: number, chars: number) {
-  return (decimal + Math.pow(16, chars)).toString(16).slice(-chars).toUpperCase();
+function Product(props: { id: string; opened: boolean; name?: string }) {
+  const { id, opened, name } = props;
+  return (
+    <div>
+      <h2>{name}</h2>
+      <button
+        className="btn btn-primary"
+        type="button"
+        onClick={() => {
+          if (opened) window.electron.closeDevice(id);
+          else window.electron.openDevice(id);
+        }}
+      >
+        {opened ? 'Disconnect' : 'Connect'}
+      </button>
+    </div>
+  );
 }
-/* eslint-enable */
+Product.defaultProps = {
+  name: '',
+};
 
-const Hello = () => {
-  const createDeviceLine = (device: HID.Device, index: number) => {
-    return (
-      <tr key={index}>
-        <td>0x{decimalToHex(device.vendorId, 4)}</td>
-        <td>0x{decimalToHex(device.productId, 4)}</td>
-        <td>0x{decimalToHex(device.usagePage ?? 0, 4)}</td>
-        <td>0x{decimalToHex(device.usage ?? 0, 4)}</td>
-        <td>{device.manufacturer}</td>
-        <td>{device.product}</td>
-        <td>{device.serialNumber}</td>
-        <td>{device.path}</td>
-      </tr>
-    );
-  };
+function ProductList() {
+  const [devices, setDevices] = useState<Device[] | []>([]);
+
+  useEffect(() => {
+    async function loadDevices() {
+      const result = await window.electron.getDeviceList();
+      if (result) setDevices(result);
+
+      window.electron.registerForUpdateDeviceList();
+    }
+    loadDevices();
+
+    window.electron.onUpdateDeviceList((result) => {
+      if (result) setDevices(result);
+    });
+  }, []);
 
   return (
     <div>
-      <h1>Hello from electron-hid-test-erb!</h1>
+      <h1>Available Controllers</h1>
+      <ul>
+        {devices.map((device) => (
+          <li key={device.id}>
+            <Product id={device.id} opened={device.opened} name={device.name} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
-      <div>
-        We are using NodeJs {process.versions.node}, Chrome{' '}
-        {process.versions.chrome}, and Electron {process.versions.electron}.
-      </div>
-
-      <h2> HID Device List </h2>
-
-      <table>
-        <thead>
-          <tr>
-            <th>vendorId</th>
-            <th>productId</th>
-            <th>usagePage</th>
-            <th>usage</th>
-            <th>manufacturer</th>
-            <th>product</th>
-            <th>serialNumber</th>
-            <th>path</th>
-          </tr>
-        </thead>
-        <tbody>{devices.map(createDeviceLine, this)}</tbody>
-      </table>
-
-      <h2> HID Device List (JSON) </h2>
-      <pre>{JSON.stringify(HID.devices(), null, '  ')}</pre>
+const Hello = () => {
+  return (
+    <div>
+      <ProductList />
     </div>
   );
 };

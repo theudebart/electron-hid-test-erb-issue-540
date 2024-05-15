@@ -18,9 +18,9 @@ if (process.env.NODE_ENV === 'production') {
 
 const port = process.env.PORT || 1212;
 const manifest = path.resolve(webpackPaths.dllPath, 'renderer.json');
-const requiredByDLLConfig = module.parent!.filename.includes(
-  'webpack.config.renderer.dev.dll'
-);
+const requiredByDLLConfig =
+  module.parent?.filename.includes('webpack.config.renderer.dev.dll') ||
+  module.parent?.filename.includes('webpack.config.eslint');
 
 /**
  * Warn if the DLL is not built
@@ -42,7 +42,7 @@ const configuration: webpack.Configuration = {
 
   mode: 'development',
 
-  target: ['electron-renderer'],
+  target: ['web', 'electron-renderer'],
 
   entry: [
     `webpack-dev-server/client?http://localhost:${port}/dist`,
@@ -54,6 +54,9 @@ const configuration: webpack.Configuration = {
     path: webpackPaths.distRendererPath,
     publicPath: '/',
     filename: 'renderer.dev.js',
+    library: {
+      type: 'umd',
+    },
   },
 
   module: {
@@ -158,15 +161,26 @@ const configuration: webpack.Configuration = {
     historyApiFallback: {
       verbose: true,
     },
-    onBeforeSetupMiddleware() {
+    setupMiddlewares(middlewares) {
+      console.log('Starting preload.js builder...');
+      const preloadProcess = spawn('npm', ['run', 'start:preload'], {
+        shell: true,
+        stdio: 'inherit',
+      })
+        .on('close', (code: number) => process.exit(code!))
+        .on('error', (spawnError) => console.error(spawnError));
       console.log('Starting Main Process...');
       spawn('npm', ['run', 'start:main'], {
         shell: true,
         env: process.env,
         stdio: 'inherit',
       })
-        .on('close', (code: number) => process.exit(code!))
+        .on('close', (code: number) => {
+          preloadProcess.kill();
+          process.exit(code!);
+        })
         .on('error', (spawnError) => console.error(spawnError));
+      return middlewares;
     },
   },
 };

@@ -9,13 +9,13 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 
-import HID from 'node-hid';
 import path from 'path';
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
+import DeviceService from './devices';
 
 export default class AppUpdater {
   constructor() {
@@ -25,15 +25,28 @@ export default class AppUpdater {
   }
 }
 
-const devices = HID.devices();
-console.log('HID devices:', devices);
-
 let mainWindow: BrowserWindow | null = null;
 
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  console.log(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
+const deviceService = new DeviceService();
+ipcMain.handle('getDeviceList', async () => {
+  return deviceService.getDeviceList();
+});
+ipcMain.handle('openDevice', async (_event, deviceId) => {
+  return deviceService.openDevice(deviceId);
+});
+ipcMain.handle('closeDevice', async (_event, deviceId) => {
+  return deviceService.closeDevice(deviceId);
+});
+ipcMain.handle('registerForUpdateDeviceList', async (_event) => {
+  deviceService.on('updateDeviceList', (result) => {
+    if (
+      _event === undefined ||
+      _event.sender === undefined ||
+      _event.sender.isDestroyed()
+    )
+      return;
+    _event.sender.send('updateDeviceList', result);
+  });
 });
 
 if (process.env.NODE_ENV === 'production') {
@@ -80,9 +93,12 @@ const createWindow = async () => {
     height: 728,
     icon: getAssetPath('icon.png'),
     webPreferences: {
-      // preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: true,
-      contextIsolation: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: app.isPackaged
+        ? path.join(__dirname, 'preload.js')
+        : path.join(__dirname, '../../.erb/dll/preload.js'),
     },
   });
 
